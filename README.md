@@ -291,33 +291,6 @@ python test_dynamic_unfold.py
 - ✅ Edge cases (zero/large dilations)
 - ✅ Mixed precision (FP16/FP32/FP64)
 
-**Sample Output:**
-
-```
-======================================================================
-Running Dynamic Dilation Unfold Tests
-======================================================================
-
-=== Test Basic Forward ===
-Output shape: torch.Size([2, 27, 64])
-✓ Basic forward test passed
-
-=== Test Gradient Input ===
-Input gradient shape: torch.Size([2, 2, 6, 6])
-Input gradient mean: 0.150234
-Input gradient std: 0.489123
-✓ Input gradient test passed
-
-=== Test Numerical Gradient ===
-Max relative error: 0.000023
-Mean relative error: 0.000008
-✓ Numerical gradient test passed
-
-======================================================================
-✓ All tests passed!
-======================================================================
-```
-
 ## 📊 Performance Benchmark
 
 ### Speed Comparison

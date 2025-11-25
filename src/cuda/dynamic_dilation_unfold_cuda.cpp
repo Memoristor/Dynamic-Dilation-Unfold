@@ -1,0 +1,70 @@
+#include <torch/extension.h>
+#include <vector>
+
+// CUDA forward declarations
+torch::Tensor dynamic_dilation_unfold_cuda_forward(
+    torch::Tensor input,
+    torch::Tensor dilation_map,
+    int kernel_h, int kernel_w,
+    int stride_h, int stride_w,
+    int pad_h, int pad_w,
+    int dilation_h, int dilation_w);
+
+std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
+    torch::Tensor grad_output,
+    torch::Tensor input,
+    torch::Tensor dilation_map,
+    int kernel_h, int kernel_w,
+    int stride_h, int stride_w,
+    int pad_h, int pad_w,
+    int dilation_h, int dilation_w);
+
+// C++ interface
+#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
+
+torch::Tensor dynamic_dilation_unfold_forward(
+    torch::Tensor input,
+    torch::Tensor dilation_map,
+    int kernel_h, int kernel_w,
+    int stride_h, int stride_w,
+    int pad_h, int pad_w,
+    int dilation_h, int dilation_w) {
+    
+    CHECK_INPUT(input);
+    CHECK_INPUT(dilation_map);
+    
+    return dynamic_dilation_unfold_cuda_forward(
+        input, dilation_map,
+        kernel_h, kernel_w,
+        stride_h, stride_w,
+        pad_h, pad_w,
+        dilation_h, dilation_w);
+}
+
+std::vector<torch::Tensor> dynamic_dilation_unfold_backward(
+    torch::Tensor grad_output,
+    torch::Tensor input,
+    torch::Tensor dilation_map,
+    int kernel_h, int kernel_w,
+    int stride_h, int stride_w,
+    int pad_h, int pad_w,
+    int dilation_h, int dilation_w) {
+    
+    CHECK_INPUT(grad_output);
+    CHECK_INPUT(input);
+    CHECK_INPUT(dilation_map);
+    
+    return dynamic_dilation_unfold_cuda_backward(
+        grad_output, input, dilation_map,
+        kernel_h, kernel_w,
+        stride_h, stride_w,
+        pad_h, pad_w,
+        dilation_h, dilation_w);
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("forward", &dynamic_dilation_unfold_forward, "Dynamic Dilation Unfold forward (CUDA)");
+    m.def("backward", &dynamic_dilation_unfold_backward, "Dynamic Dilation Unfold backward (CUDA)");
+}

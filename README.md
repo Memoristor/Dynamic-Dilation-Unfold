@@ -46,7 +46,7 @@ nvcc --version  # Should match PyTorch CUDA version
 ### Install from Source
 
 ```bash
-git clone https://github.com/yourusername/dynamic_dilation_unfold.git
+git clone https://github.com/Memoristor/Dynamic-Dilation-Unfold.git
 cd dynamic_dilation_unfold
 pip install -e .
 ```

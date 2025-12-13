@@ -8,7 +8,8 @@ torch::Tensor dynamic_dilation_unfold_cuda_forward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w);
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group);
 
 std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
     torch::Tensor grad_output,
@@ -17,7 +18,8 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w);
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group);
 
 // C++ interface
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
@@ -30,7 +32,8 @@ torch::Tensor dynamic_dilation_unfold_forward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w) {
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group) {
     
     CHECK_INPUT(input);
     CHECK_INPUT(dilation_map);
@@ -40,7 +43,8 @@ torch::Tensor dynamic_dilation_unfold_forward(
         kernel_h, kernel_w,
         stride_h, stride_w,
         pad_h, pad_w,
-        dilation_h, dilation_w);
+        dilation_h, dilation_w,
+        groups, channels_per_group);
 }
 
 std::vector<torch::Tensor> dynamic_dilation_unfold_backward(
@@ -50,7 +54,8 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_backward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w) {
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group) {
     
     CHECK_INPUT(grad_output);
     CHECK_INPUT(input);
@@ -61,7 +66,8 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_backward(
         kernel_h, kernel_w,
         stride_h, stride_w,
         pad_h, pad_w,
-        dilation_h, dilation_w);
+        dilation_h, dilation_w,
+        groups, channels_per_group);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

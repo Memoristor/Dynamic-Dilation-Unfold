@@ -414,6 +414,66 @@ def test_gradient():
     return passed_x and passed_d
 
 
+def test_grouped_dynamic_unfold():
+    """Test grouped dynamic dilation unfold"""
+    print("\n" + "=" * 80)
+    print("GROUPED DYNAMIC DILATION TEST")
+    print("=" * 80)
+    
+    B, C, H, W = 2, 6, 16, 16  # 6 channels for 2 groups (3 channels per group)
+    groups = 2
+    kernel_size = 3
+    
+    # Create input
+    torch.manual_seed(42)
+    x = torch.randn(B, C, H, W).cuda()
+    
+    # Create different dilation maps for each group
+    dilation_map = torch.ones(B, groups, H, W).cuda()
+    dilation_map[:, 0] = 1.5  # First group dilation = 1.5
+    dilation_map[:, 1] = 2.5  # Second group dilation = 2.5
+    
+    # Apply unfold
+    output = dynamic_dilation_unfold(
+        x, kernel_size=kernel_size, dilation_map=dilation_map,
+        stride=1, padding=1, groups=groups
+    )
+    
+    print(f"\nInput shape: {x.shape}")
+    print(f"Groups: {groups}")
+    print(f"Channels per group: {C // groups}")
+    print(f"Dilation map shape: {dilation_map.shape}")
+    print(f"Output shape: {output.shape}")
+    
+    # Verify output by comparing with separate calls for each group
+    outputs_separate = []
+    for g in range(groups):
+        x_g = x[:, g * (C // groups):(g + 1) * (C // groups)]
+        dmap_g = dilation_map[:, g:g+1]
+        out_g = dynamic_dilation_unfold(
+            x_g, kernel_size=kernel_size, dilation_map=dmap_g,
+            stride=1, padding=1
+        )
+        outputs_separate.append(out_g)
+    
+    # Combine separate outputs
+    expected_output = torch.zeros_like(output)
+    for g in range(groups):
+        channels_per_group = C // groups
+        expected_output[:, g * channels_per_group * kernel_size * kernel_size:(g + 1) * channels_per_group * kernel_size * kernel_size] = outputs_separate[g]
+    
+    # Compare
+    abs_diff = torch.abs(output - expected_output)
+    max_diff = abs_diff.max().item()
+    
+    print(f"Maximum difference between grouped and separate outputs: {max_diff:.6f}")
+    
+    if max_diff < 1e-5:
+        print("  ✓ Grouped dynamic dilation test PASSED")
+    else:
+        print("  ✗ Grouped dynamic dilation test FAILED")
+        
+        
 # ============================================================================
 # Part 4: Visualization
 # ============================================================================
@@ -566,6 +626,9 @@ def main():
     
     # Test 3: Spatially-varying dilation
     test_spatially_varying_dilation()
+    
+    # Test 4: Grouped dynamic dilation unfold
+    test_grouped_dynamic_unfold()
     
     # Summary
     print("\n" + "=" * 80)

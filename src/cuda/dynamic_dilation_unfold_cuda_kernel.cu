@@ -134,6 +134,8 @@ __global__ void dynamic_dilation_unfold_forward_kernel(
     const int pad_w,
     const int dilation_h,
     const int dilation_w,
+    const int groups,
+    const int channels_per_group,
     scalar_t* output) {
     
     CUDA_KERNEL_LOOP(index, n) {
@@ -150,8 +152,13 @@ __global__ void dynamic_dilation_unfold_forward_kernel(
         const int kh = kernel_idx / kernel_w;
         const int kw = kernel_idx % kernel_w;
         
-        // Get dilation value for this output position
-        const int dilation_map_idx = b * height_out * width_out + h_out * width_out + w_out;
+        // Calculate group index based on channel
+        const int group_idx = c / channels_per_group;
+        
+        // Get dilation value for this output position and group
+        const int dilation_map_idx = b * groups * height_out * width_out + 
+                                     group_idx * height_out * width_out + 
+                                     h_out * width_out + w_out;
         const scalar_t dilation_value = dilation_map[dilation_map_idx];
         
         // Calculate input position
@@ -250,6 +257,8 @@ __global__ void dynamic_dilation_unfold_backward_input_kernel(
     const int pad_w,
     const int dilation_h,
     const int dilation_w,
+    const int groups,
+    const int channels_per_group,
     scalar_t* grad_input) {
     
     CUDA_KERNEL_LOOP(index, n) {
@@ -263,7 +272,12 @@ __global__ void dynamic_dilation_unfold_backward_input_kernel(
         const int kh = kernel_idx / kernel_w;
         const int kw = kernel_idx % kernel_w;
         
-        const int dilation_map_idx = b * height_out * width_out + h_out * width_out + w_out;
+        // Calculate group index based on channel
+        const int group_idx = c / channels_per_group;
+        
+        const int dilation_map_idx = b * groups * height_out * width_out + 
+                                     group_idx * height_out * width_out + 
+                                     h_out * width_out + w_out;
         const scalar_t dilation_value = dilation_map[dilation_map_idx];
         
         const scalar_t h_in_base = h_out * stride_h - pad_h;
@@ -327,6 +341,8 @@ __global__ void dynamic_dilation_unfold_backward_dilation_kernel(
     const int pad_w,
     const int dilation_h,
     const int dilation_w,
+    const int groups,
+    const int channels_per_group,
     scalar_t* grad_dilation_map) {
     
     CUDA_KERNEL_LOOP(index, n) {
@@ -340,7 +356,12 @@ __global__ void dynamic_dilation_unfold_backward_dilation_kernel(
         const int kh = kernel_idx / kernel_w;
         const int kw = kernel_idx % kernel_w;
         
-        const int dilation_map_idx = b * height_out * width_out + h_out * width_out + w_out;
+        // Calculate group index based on channel
+        const int group_idx = c / channels_per_group;
+        
+        const int dilation_map_idx = b * groups * height_out * width_out + 
+                                     group_idx * height_out * width_out + 
+                                     h_out * width_out + w_out;
         const scalar_t dilation_value = dilation_map[dilation_map_idx];
         
         const scalar_t h_in_base = h_out * stride_h - pad_h;
@@ -373,7 +394,8 @@ torch::Tensor dynamic_dilation_unfold_cuda_forward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w) {
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group) {
     
     const int batch_size = input.size(0);
     const int channels = input.size(1);
@@ -400,6 +422,7 @@ torch::Tensor dynamic_dilation_unfold_cuda_forward(
                 stride_h, stride_w,
                 pad_h, pad_w,
                 dilation_h, dilation_w,
+                groups, channels_per_group,
                 output.data_ptr<scalar_t>());
     }));
     
@@ -413,7 +436,8 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
     int kernel_h, int kernel_w,
     int stride_h, int stride_w,
     int pad_h, int pad_w,
-    int dilation_h, int dilation_w) {
+    int dilation_h, int dilation_w,
+    int groups, int channels_per_group) {
     
     const int batch_size = input.size(0);
     const int channels = input.size(1);
@@ -440,6 +464,7 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
                 stride_h, stride_w,
                 pad_h, pad_w,
                 dilation_h, dilation_w,
+                groups, channels_per_group,
                 grad_input.data_ptr<scalar_t>());
         
         dynamic_dilation_unfold_backward_dilation_kernel<scalar_t>
@@ -454,6 +479,7 @@ std::vector<torch::Tensor> dynamic_dilation_unfold_cuda_backward(
                 stride_h, stride_w,
                 pad_h, pad_w,
                 dilation_h, dilation_w,
+                groups, channels_per_group,
                 grad_dilation_map.data_ptr<scalar_t>());
     }));
     

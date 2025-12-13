@@ -24,6 +24,7 @@ This is inspired by Deformable Convolution (DCNv2), but focuses specifically on 
 ## ✨ Key Features
 
 - **🔄 Spatially-Varying Dilation**: Each output position can have different dilation rates
+- **👥 Grouped Processing**: Support for channel groups with different dilation maps per group
 - **⚡ CUDA Acceleration**: Optimized CUDA kernels for maximum performance
 - **🎓 Full Autograd Support**: Differentiable with respect to both input and dilation_map
 - **🔧 Easy Integration**: Drop-in replacement compatible with `torch.nn.Unfold` API
@@ -143,6 +144,34 @@ plt.title('Spatially-Varying Dilation Map')
 plt.show()
 ```
 
+### Advanced: Grouped Dynamic Dilation
+
+```python
+# Create input with 6 channels (2 groups with 3 channels each)
+x = torch.randn(2, 6, 32, 32).cuda()
+
+# Create dilation maps for each group
+dilation_map = torch.ones(2, 2, 32, 32).cuda()
+
+# Different dilation rates for each group
+dilation_map[:, 0] *= 1.0  # Group 1 dilation rate
+dilation_map[:, 1] *= 2.0  # Group 2 dilation rate
+
+# Apply grouped dynamic dilation unfold
+output = dynamic_dilation_unfold(
+    input=x,
+    kernel_size=3,
+    dilation_map=dilation_map,
+    stride=1,
+    padding=1,
+    groups=2  # Use 2 groups for 6 channels (3 per group)
+)
+
+print(f"Input shape:  {x.shape}")           # [2, 6, 32, 32]
+print(f"Group dilation map shape: {dilation_map.shape}")  # [2, 2, 32, 32]
+print(f"Output shape: {output.shape}")      # [2, 54, 1024]
+```
+
 ## 🔧 API Reference
 
 ### Function API
@@ -154,7 +183,8 @@ dynamic_dilation_unfold(
     dilation_map: torch.Tensor,
     stride: Union[int, Tuple[int, int]] = 1,
     padding: Union[int, Tuple[int, int]] = 0,
-    dilation: Union[int, Tuple[int, int]] = 1
+    dilation: Union[int, Tuple[int, int]] = 1,
+    groups: int = 1
 ) -> torch.Tensor
 ```
 
@@ -162,10 +192,11 @@ dynamic_dilation_unfold(
 
 - **input** (*torch.Tensor*): Input tensor of shape $(B, C, H, W)$
 - **kernel_size** (*int or tuple*): Size of the sliding window. Can be a single int or tuple $(k_H, k_W)$
-- **dilation_map** (*torch.Tensor*): Dilation map of shape $(B, 1, H_{out}, W_{out})$. Each value $\geq 0$ indicates the dilation rate at that spatial position
+- **dilation_map** (*torch.Tensor*): Dilation map of shape $(B, G, H_{out}, W_{out})$, where $G$ is the number of groups. Each value $\geq 0$ indicates the dilation rate at that spatial position for that group.
 - **stride** (*int or tuple, optional*): Stride of the sliding window. Default: 1
 - **padding** (*int or tuple, optional*): Implicit zero padding. Default: 0
 - **dilation** (*int or tuple, optional*): Base dilation multiplier. Default: 1
+- **groups** (*int, optional*): Number of groups to separate the channels into. The input channels must be divisible by this value. Default: 1
 
 **Returns:**
 
@@ -186,7 +217,8 @@ class DynamicDilationUnfold(nn.Module):
         kernel_size: Union[int, Tuple[int, int]],
         stride: Union[int, Tuple[int, int]] = 1,
         padding: Union[int, Tuple[int, int]] = 0,
-        dilation: Union[int, Tuple[int, int]] = 1
+        dilation: Union[int, Tuple[int, int]] = 1,
+        groups: int = 1
     )
     
     def forward(
@@ -216,13 +248,22 @@ where $s_h, s_w$ are strides, $p_h, p_w$ are paddings, and $d_h, d_w$ are **fixe
 
 For output position $(i, j)$ and kernel position $(m, n)$, the sampling coordinates use **spatially-varying dilation**:
 
-$$h_{in} = i \cdot s_h - p_h + \left(m - \frac{k_H - 1}{2}\right) \cdot d_h \cdot \mathbf{D}_{b,0,i,j}$$
+$$h_{in} = i \cdot s_h - p_h + \left(m - \frac{k_H - 1}{2}\right) \cdot d_h \cdot \mathbf{D}_{b,g,i,j}$$
 
-$$w_{in} = j \cdot s_w - p_w + \left(n - \frac{k_W - 1}{2}\right) \cdot d_w \cdot \mathbf{D}_{b,0,i,j}$$
+$$w_{in} = j \cdot s_w - p_w + \left(n - \frac{k_W - 1}{2}\right) \cdot d_w \cdot \mathbf{D}_{b,g,i,j}$$
 
-where $\mathbf{D}_{b,0,i,j}$ is the **spatially-varying** dilation rate from the dilation map at position $(i, j)$ for batch $b$.
+where $\mathbf{D}_{b,g,i,j}$ is the **spatially-varying** dilation rate from the dilation map at position $(i, j)$ for batch $b$ and group $g$.
 
-**Note**: The term $(m - \frac{k_H - 1}{2})$ centers the kernel coordinates around the middle position, making the dilation expansion symmetric around the center. This is similar to the offset convention used in Deformable Convolution.
+### Grouped Processing
+
+With grouped processing, the channels are divided into $G$ groups, each with its own dilation map:
+
+- Input channels $C$ are split into $G$ groups, each with $C/G$ channels
+- Dilation map has shape $(B, G, H_{out}, W_{out})$ with a separate dilation value per group
+- For a channel $c$, the corresponding group $g$ is $\lfloor c / (C/G) \rfloor$
+- The dilation value applied to that channel is $\mathbf{D}_{b,g,i,j}$
+
+This allows different parts of the feature maps to have different receptive field sizes.
 
 ### Example: 3×3 Kernel
 
@@ -238,7 +279,7 @@ For a $3 \times 3$ kernel ($k_H = k_W = 3$), the kernel positions and their offs
 - $(m, n) = (1, 1)$: offset $= (0, 0)$ (center remains fixed)
 - $(m, n) = (2, 2)$: offset $= (d_h \cdot \mathbf{D}, d_w \cdot \mathbf{D})$
 
-This makes the receptive field expand/contract symmetrically around each output position based on the local dilation value $\mathbf{D}_{b,0,i,j}$.
+This makes the receptive field expand/contract symmetrically around each output position based on the local dilation value $\mathbf{D}_{b,g,i,j}$.
 
 ## 💡 Usage Example: Gradient Flow Analysis
 
@@ -279,17 +320,6 @@ Run the comprehensive test suite:
 cd tests
 python test_dynamic_unfold.py
 ```
-
-**Test Coverage:**
-
-- ✅ Basic forward pass
-- ✅ Gradient computation (input & dilation_map)
-- ✅ Numerical gradient verification
-- ✅ Different dilation values
-- ✅ Spatially-varying dilation
-- ✅ Module interface
-- ✅ Edge cases (zero/large dilations)
-- ✅ Mixed precision (FP16/FP32/FP64)
 
 ## 📊 Performance Benchmark
 
@@ -367,6 +397,10 @@ A: Yes! Both the input and dilation_map have full gradient support through bilin
 
 A: Yes! The dilation_map supports any non-negative floating-point values, enabling smooth, continuous control over receptive field sizes.
 
+**Q: When should I use grouped dynamic dilation?**
+
+A: Grouped dynamic dilation is useful when you want to process different channel groups with different dilation patterns. For example, some channels might benefit from larger receptive fields while others from smaller ones.
+
 **Q: What's the computational overhead?**
 
 A: The main overhead comes from bilinear interpolation (4 samples per kernel position) and atomic operations in the backward pass. Typically 2-3x slower than standard unfold for similar configurations.
@@ -384,3 +418,4 @@ This project is licensed under the MIT License.
 This project is inspired by:
 - [Deformable Convolution V2](https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch) by Chengdazhi
 - [DCNv2](https://github.com/CharlesShang/DCNv2) by CharlesShang
+- [DCNv4](https://github.com/OpenGVLab/DCNv4) by OpenGVLab

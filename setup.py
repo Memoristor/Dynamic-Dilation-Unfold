@@ -30,7 +30,7 @@ def get_extensions():
 
 setup(
     name='dynamic_dilation_unfold',
-    version='1.0.1',
+    version='1.0.2',
     author='cjdeng',
     description='Dynamic Dilation Unfold with CUDA acceleration',
     long_description=open('README.md').read(),
